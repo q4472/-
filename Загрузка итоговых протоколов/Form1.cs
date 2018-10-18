@@ -18,7 +18,8 @@ namespace Загрузка_итоговых_протоколов
         private String[] Auctions;
         private Boolean ВыбранаПапкаДляЗагрузкиПротоколов;
         private String ПапкаДляЗагрузкиПротоколов;
-        private SharedStringTable SharedStringTable;
+        public Boolean ОстановитьЗагрузку;
+
         private void button1_Click(object sender, EventArgs e)
         {
             openFileDialog1.Filter = "Excel|*.xlsx";
@@ -26,27 +27,25 @@ namespace Загрузка_итоговых_протоколов
             if (openFileDialog1.FileName != "openFileDialog1")
             {
                 textBox1.Text = openFileDialog1.FileName;
-                LogPushLine(String.Format($"Выбран файл со списком аукционов '{openFileDialog1.FileName}'."));
+                LogPushLine(String.Format($"Form: Выбран файл со списком аукционов '{openFileDialog1.FileName}'."));
                 Stream stream = openFileDialog1.OpenFile();
                 if (stream.CanRead)
                 {
-                    LogPushLine(String.Format($"Файл доступен для чтения."));
+                    //LogPushLine(String.Format($"Form: Файл доступен для чтения."));
                     ВыбранФайлСоСпискомАукционов = true;
-                    Auctions = НайтиВсеНомераАукционов(stream);
+                    ExcelLdr excelLdr = new ExcelLdr(this);
+                    Auctions = excelLdr.НайтиВсеНомераАукционов(stream);
+                    //Auctions = new string[] { "0321100017618000155" };
                 }
                 else
                 {
-                    LogPushLine(String.Format($"Файл не доступен для чтения."));
+                    LogPushLine(String.Format($"Form: Файл не доступен для чтения."));
                 }
             }
             else
             {
-                LogPushLine(String.Format($"Файл не выбран."));
+                LogPushLine(String.Format($"Form: Файл не выбран."));
             }
-            try
-            {
-            }
-            catch (Exception ex) { richTextBox1.Text = ex.Message; }
         }
         private void button2_Click(object sender, EventArgs e)
         {
@@ -56,11 +55,11 @@ namespace Загрузка_итоговых_протоколов
                 ПапкаДляЗагрузкиПротоколов = folderBrowserDialog1.SelectedPath;
                 textBox2.Text = folderBrowserDialog1.SelectedPath;
                 ВыбранаПапкаДляЗагрузкиПротоколов = true;
-                LogPushLine(String.Format($"Для загрузки протоколов выбрана папка '{folderBrowserDialog1.SelectedPath}'."));
+                LogPushLine(String.Format($"Form: Для загрузки протоколов выбрана папка '{folderBrowserDialog1.SelectedPath}'."));
             }
             else
             {
-                LogPushLine(String.Format($"Не выбрана папка для загрузки протоколов."));
+                LogPushLine(String.Format($"Form: Не выбрана папка для загрузки протоколов."));
             }
         }
         private void button3_Click(object sender, EventArgs e)
@@ -72,71 +71,50 @@ namespace Загрузка_итоговых_протоколов
                 {
                     if (ВыбранаПапкаДляЗагрузкиПротоколов)
                     {
+                        button4.Enabled = true;
                         PrtLdr prtLdr = new PrtLdr(this, Auctions, ПапкаДляЗагрузкиПротоколов);
                         Thread thread1 = new Thread(prtLdr.ЗагрузитьИтоговыеПротоколы);
                         thread1.IsBackground = true; // завершить этот поток при завершении основного потока
                         thread1.Start();
                     }
-                    else { LogPushLine(String.Format($"Не выбрана папка для загрузки протоколов.")); }
+                    else { LogPushLine(String.Format($"Form: Не выбрана папка для загрузки протоколов.")); }
                 }
-                else { LogPushLine(String.Format($"Список аукционов пуст.")); }
+                else { LogPushLine(String.Format($"Form: Список аукционов пуст.")); }
             }
-            else { LogPushLine(String.Format($"Не выбран файл со списком аукционов.")); }
+            else { LogPushLine(String.Format($"Form: Не выбран файл со списком аукционов.")); }
             Thread.Sleep(1000);
             button3.Enabled = true;
         }
         private void button4_Click(object sender, EventArgs e)
         {
+            button4.Enabled = false;
             ОстановитьЗагрузку = true;
         }
-        private String[] НайтиВсеНомераАукционов(Stream stream)
+
+        public delegate void LogPushLineCallback(String msg);
+        public void LogPushLine(String msg)
         {
-            LogPushLine(String.Format($"Старт - НайтиВсеНомераАукционов()."));
-            List<String> ans = new List<string>();
-            try
+            if (richTextBox1.InvokeRequired)
             {
-                SpreadsheetDocument doc = SpreadsheetDocument.Open(stream, false);
-                WorkbookPart wbPart = doc.WorkbookPart;
-                SharedStringTable = wbPart.SharedStringTablePart.SharedStringTable;
-                Sheets sheets = wbPart.Workbook.Sheets;
-                Sheet firstSheet = (Sheet)sheets.FirstChild;
-                if (firstSheet != null)
-                {
-                    LogPushLine(String.Format($"Просматриваем первый лист."));
-                    WorksheetPart wsPart = (WorksheetPart)(wbPart.GetPartById(firstSheet.Id));
-                    IEnumerable<Cell> cells = wsPart.Worksheet.Descendants<Cell>();
-                    Int32 cellCount = 0;
-                    Regex re = new Regex(@"(\d{19})");
-                    foreach (Cell cell in cells)
-                    {
-                        if (cell != null)
-                        {
-                            String cellValue = GetCellValue(doc, cell);
-                            Match match = re.Match(cellValue);
-                            if (match.Success)
-                            {
-                                String auctionNumber = match.Groups[1].Value;
-                                //LogPushLine(String.Format($"auctionNumber: '{auctionNumber}'."));
-                                if (!ans.Contains(auctionNumber))
-                                {
-                                    ans.Add(auctionNumber);
-                                }
-                            }
-                            cellCount++;
-                        }
-                        //if (cellCount > 100) break;
-                    }
-                    LogPushLine(String.Format($"Найдено ячеек: {cellCount}."));
-                    LogPushLine(String.Format($"Найдено номеров аукционов: {ans.Count}."));
-                }
-                else
-                {
-                    LogPushLine(String.Format($"Не найден первый лист."));
-                }
+                Invoke(new LogPushLineCallback(LogPushLine), new object[] { msg });
             }
-            catch (Exception ex) { richTextBox1.Text = ex.ToString(); }
-            return ans.ToArray();
+            else
+            {
+                richTextBox1.Text = String.Format($"{DateTime.Now:yyyy-MM-dd HH:mm:ss}: {msg}\n{richTextBox1.Text}");
+                richTextBox1.Refresh();
+            }
         }
+        public Form1()
+        {
+            InitializeComponent();
+            LogPushLine(String.Format("Form: Старт."));
+        }
+    }
+    public class ExcelLdr
+    {
+        private Form1 ParentForm;
+        private SharedStringTable SharedStringTable;
+
         private String GetCellValue(SpreadsheetDocument document, Cell cell)
         {
             String value = String.Empty;
@@ -156,26 +134,64 @@ namespace Загрузка_итоговых_протоколов
             }
             return value;
         }
-        public Boolean ОстановитьЗагрузку;
-        public void LogPushLine(String msg)
+        private void LogPushLine(String msg)
         {
-            msg = String.Format("{0:yyyy-MM-dd HH:mm:ss}: {1}", DateTime.Now, msg);
-            if (richTextBox1.InvokeRequired)
-            {
-                LogPushLineCallback1 d = new LogPushLineCallback1(LogPushLine);
-                Invoke(d, new object[] { msg });
-            }
-            else
-            {
-                richTextBox1.Text = msg + "\n" + richTextBox1.Text;
-                richTextBox1.Refresh();
-            }
+            msg = "ExcelLdr: " + msg;
+            ParentForm.LogPushLine(msg);
         }
-        public delegate void LogPushLineCallback1(String msg);
-        public Form1()
+
+        public ExcelLdr(Form1 parentForm)
         {
-            InitializeComponent();
-            LogPushLine(String.Format("Старт."));
+            ParentForm = parentForm;
+        }
+        public String[] НайтиВсеНомераАукционов(Stream stream)
+        {
+            LogPushLine(String.Format($"НайтиВсеНомераАукционов(): Старт."));
+            List<String> ans = new List<string>();
+            try
+            {
+                SpreadsheetDocument doc = SpreadsheetDocument.Open(stream, false);
+                WorkbookPart wbPart = doc.WorkbookPart;
+                SharedStringTable = wbPart.SharedStringTablePart.SharedStringTable;
+                Sheets sheets = wbPart.Workbook.Sheets;
+                Sheet firstSheet = (Sheet)sheets.FirstChild;
+                if (firstSheet != null)
+                {
+                    LogPushLine(String.Format($"\tПросматриваем первый лист."));
+                    WorksheetPart wsPart = (WorksheetPart)(wbPart.GetPartById(firstSheet.Id));
+                    IEnumerable<Cell> cells = wsPart.Worksheet.Descendants<Cell>();
+                    Int32 cellCount = 0;
+                    Regex re = new Regex(@"(\d{19})");
+                    foreach (Cell cell in cells)
+                    {
+                        if (cell != null)
+                        {
+                            String cellValue = GetCellValue(doc, cell);
+                            Match match = re.Match(cellValue);
+                            if (match.Success)
+                            {
+                                String auctionNumber = match.Groups[1].Value;
+                                //LogPushLine(String.Format($"\tauctionNumber: '{auctionNumber}'."));
+                                if (!ans.Contains(auctionNumber))
+                                {
+                                    ans.Add(auctionNumber);
+                                }
+                            }
+                            cellCount++;
+                        }
+                        //if (cellCount > 100) break;
+                    }
+                    LogPushLine(String.Format($"\tНайдено ячеек: {cellCount}."));
+                    LogPushLine(String.Format($"\tНайдено номеров аукционов: {ans.Count}."));
+                }
+                else
+                {
+                    LogPushLine(String.Format($"\tНе найден первый лист."));
+                }
+            }
+            catch (Exception ex) { LogPushLine(ex.ToString()); }
+            LogPushLine(String.Format($"НайтиВсеНомераАукционов(): Стоп."));
+            return ans.ToArray();
         }
     }
     public class PrtLdr
@@ -183,6 +199,7 @@ namespace Загрузка_итоговых_протоколов
         private Form1 ParentForm; 
         private String[] Auctions;
         private String ПапкаДляЗагрузкиПротоколов;
+
         private String GetFileNameFromContentDispositionHttpHeader(String contentDispositionValue)
         {
             String fileName = String.Empty;
@@ -301,6 +318,11 @@ namespace Загрузка_итоговых_протоколов
         private void ЗагрузитьДокументПоСсылке(String href, String auctionNumber)
         {
             LogPushLine(String.Format($"Пробуем загрузить протокол по ссылке '{href}'."));
+            if (href[0] == '/')
+            {
+                href = "http://zakupki.gov.ru" + href;
+                href = href.Replace("regnumber", "regNumber").Replace("protocolid", "protocolId");
+            }
             HttpWebRequest rq = WebRequest.CreateHttp(href);
             rq.UseDefaultCredentials = true;
             // сайт не отвечает на автоматические запросы. поэтому притворяемся браузером.
@@ -385,6 +407,7 @@ namespace Загрузка_итоговых_протоколов
             catch (Exception e) { LogPushLine(String.Format($"{e}")); }
             LogPushLine(String.Format($"Закончена попытка загрузить протокол по ссылке '{href}'."));
         }
+
         public PrtLdr(Form1 parentForm, String[] auctions, String папкаДляЗагрузкиПротоколов)
         {
             ParentForm = parentForm;
