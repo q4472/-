@@ -15,7 +15,7 @@ namespace Загрузка_итоговых_протоколов
     public partial class Form1 : Form
     {
         private Boolean ВыбранФайлСоСпискомАукционов;
-        private String[] Auctions;
+        private List<String> Auctions;
         private Boolean ВыбранаПапкаДляЗагрузкиПротоколов;
         private String ПапкаДляЗагрузкиПротоколов;
         public Boolean ОстановитьЗагрузку;
@@ -67,12 +67,12 @@ namespace Загрузка_итоговых_протоколов
             button3.Enabled = false;
             if (ВыбранФайлСоСпискомАукционов)
             {
-                if (Auctions != null && Auctions.Length != 0)
+                if (Auctions != null && Auctions.Count != 0)
                 {
                     if (ВыбранаПапкаДляЗагрузкиПротоколов)
                     {
                         button4.Enabled = true;
-                        PrtLdr prtLdr = new PrtLdr(this, Auctions, ПапкаДляЗагрузкиПротоколов);
+                        PrtLdr prtLdr = new PrtLdr(this, Auctions.ToArray(), ПапкаДляЗагрузкиПротоколов);
                         Thread thread1 = new Thread(prtLdr.ЗагрузитьИтоговыеПротоколы);
                         thread1.IsBackground = true; // завершить этот поток при завершении основного потока
                         thread1.Start();
@@ -144,10 +144,10 @@ namespace Загрузка_итоговых_протоколов
         {
             ParentForm = parentForm;
         }
-        public String[] НайтиВсеНомераАукционов(Stream stream)
+        public List<String> НайтиВсеНомераАукционов(Stream stream)
         {
             LogPushLine(String.Format($"НайтиВсеНомераАукционов(): Старт."));
-            List<String> ans = new List<string>();
+            List<String> auctions = new List<string>();
             try
             {
                 SpreadsheetDocument doc = SpreadsheetDocument.Open(stream, false);
@@ -172,9 +172,9 @@ namespace Загрузка_итоговых_протоколов
                             {
                                 String auctionNumber = match.Groups[1].Value;
                                 //LogPushLine(String.Format($"\tauctionNumber: '{auctionNumber}'."));
-                                if (!ans.Contains(auctionNumber))
+                                if (!auctions.Contains(auctionNumber))
                                 {
-                                    ans.Add(auctionNumber);
+                                    auctions.Add(auctionNumber);
                                 }
                             }
                             cellCount++;
@@ -182,7 +182,7 @@ namespace Загрузка_итоговых_протоколов
                         //if (cellCount > 100) break;
                     }
                     LogPushLine(String.Format($"\tНайдено ячеек: {cellCount}."));
-                    LogPushLine(String.Format($"\tНайдено номеров аукционов: {ans.Count}."));
+                    LogPushLine(String.Format($"\tНайдено номеров аукционов: {auctions.Count}."));
                 }
                 else
                 {
@@ -191,12 +191,12 @@ namespace Загрузка_итоговых_протоколов
             }
             catch (Exception ex) { LogPushLine(ex.ToString()); }
             LogPushLine(String.Format($"НайтиВсеНомераАукционов(): Стоп."));
-            return ans.ToArray();
+            return auctions;
         }
     }
     public class PrtLdr
     {
-        private Form1 ParentForm; 
+        private Form1 ParentForm;
         private String[] Auctions;
         private String ПапкаДляЗагрузкиПротоколов;
 
@@ -417,9 +417,26 @@ namespace Загрузка_итоговых_протоколов
         public void ЗагрузитьИтоговыеПротоколы()
         {
             LogPushLine(String.Format($"Пробуем загрузить итоговые протоколы."));
+
+            DirectoryInfo d = new DirectoryInfo(ПапкаДляЗагрузкиПротоколов);
+            FileInfo[] files = d.GetFiles();
+            foreach (FileInfo f in files)
+            {
+                for (int i = 0; i < Auctions.Length; i++)
+                {
+                    String an = Auctions[i];
+                    if (an != null && f.Name.Contains(an))
+                    {
+                        Auctions[i] = null;
+                        LogPushLine(String.Format($"Протокол по аукциону '{an}' уже загружен."));
+                    }
+                }
+            }
+
             Int32 cnt = 1;
             foreach (String auctionNumber in Auctions)
             {
+                if (auctionNumber == null) { cnt++; ; continue; }
                 LogPushLine(String.Format($"Пробуем загрузить итоговые протоколы для акциона '{auctionNumber}' ({cnt} из {Auctions.Length})."));
                 String uri = "http://zakupki.gov.ru/epz/order/notice/ea44/view/supplier-results.html?regNumber=" + auctionNumber;
                 HttpWebRequest rq = WebRequest.CreateHttp(uri);
